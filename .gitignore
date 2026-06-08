@@ -1,0 +1,40 @@
+
+# 🔒 私密資訊(絕對不上傳!)
+secrets.h
+*.secret
+*.key
+api_keys.json
+ 
+# 🔧 Arduino 編譯產物
+*.bin
+*.elf
+*.hex
+*.o
+*.a
+*.map
+build/
+.cache/
+ 
+# 📱 系統檔
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+ 
+# 💻 IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+ 
+# 🗑️ 暫存
+*.log
+*.tmp
+node_modules/
+__pycache__/
+*.pyc
+ 
+# 📦 大檔案(避免不小心 commit 進去)
+*.mp4
+*.mov
+*.zip
