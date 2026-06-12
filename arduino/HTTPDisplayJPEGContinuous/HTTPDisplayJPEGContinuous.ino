@@ -9,7 +9,7 @@
 
 #include <WiFi.h>
 #include "VideoStream.h"
-#include "secrets.h"
+#include "../secrets.h"
 #define CHANNEL 0
 
 // Use a pre-defined resolution, or choose to configure your own resolution
