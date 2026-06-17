@@ -33,7 +33,7 @@
 // ╔══════════════════════════════════════════╗
 // ║  ⚠️ 請修改這個學院碼!                     ║
 // ╚══════════════════════════════════════════╝
-const char* COLLEGE_CODE = "MGT";  // MGT / SCI / HUM / ENG / LAW
+const char* COLLEGE_CODE = "ENG";  // MGT / SCI / HUM / ENG / LAW
 
 // 發送間隔(毫秒)
 const unsigned long TX_INTERVAL_MS = 1500;
@@ -57,6 +57,11 @@ const unsigned long TX_INTERVAL_MS = 1500;
 // ====================================================
 #define LORA_SERIAL Serial2
 
+#include "DHT.h"
+#define DHTPIN 4       // 假設接在 GPIO 4
+#define DHTTYPE DHT11  // 指定使用 DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
 // 如果你想用其他腳位(進階),可以這樣明確指定:
 // Serial2.begin(115200, SERIAL_8N1, 16, 17);
 //                                   ^^  ^^
@@ -68,6 +73,9 @@ const unsigned long TX_INTERVAL_MS = 1500;
 // ====================================================
 unsigned int counter = 0;
 unsigned long lastTxTime = 0;
+
+
+
 
 // ====================================================
 // 發送 AT 指令給 S76S 並印出回應
@@ -141,13 +149,35 @@ String asciiToHex(const String& s) {
 }
 
 // ====================================================
-// 發送一次封包
+// 發送一次封包（已相容工院 DHT11 與其他學院基本功能）
 // ====================================================
 void sendPikPacket() {
-    char packetStr[16];
-    snprintf(packetStr, sizeof(packetStr),
-             "PIK1%s%04d", COLLEGE_CODE, counter % 10000);
+    char packetStr[32]; // 加大陣列長度以安全容納較長的字串
 
+    // 判斷當前節點是否為工院 (ENG)
+    if (strcmp(COLLEGE_CODE, "ENG") == 0) {
+        // 1. 僅在工院時讀取溫濕度數值
+        float h = dht.readHumidity();
+        float t = dht.readTemperature();
+
+        // 檢查是否讀取失敗（例如沒接硬體或斷線）
+        if (isnan(h) || isnan(t)) {
+            Serial.println("❌ [DHT] 讀取失敗！請檢查接線。發送預設數值測試。");
+            h = 50; // 失敗時的預設替代值
+            t = 25;
+        }
+
+        // 2. 組裝成 8735 (lora_handler.h) 期待的工院特殊格式
+        // 範例：PIK1ENG_H85_T28
+        snprintf(packetStr, sizeof(packetStr), "PIK1%s_H%f_T%f", COLLEGE_CODE, h, t);
+    } 
+    else {
+        // 其他學院（MGT, SCI, HUM, LAW）不讀取 DHT，維持原有的純訊號計數器格式
+        // 範例：PIK1MGT0001
+        snprintf(packetStr, sizeof(packetStr), "PIK1%s%04d", COLLEGE_CODE, counter % 10000);
+    }
+
+    // 3. 將 ASCII 字串轉換為 Hex payload
     String hexPayload = asciiToHex(String(packetStr));
     String txCmd = "rf tx " + hexPayload;
 
@@ -160,7 +190,7 @@ void sendPikPacket() {
 
     LORA_SERIAL.write(txCmd.c_str());
 
-    // 等待回應(radio_tx_ok)
+    // 等待回應 (radio_tx_ok)
     unsigned long timeout = millis() + 2500;
     String resp = "";
     while (millis() < timeout) {
@@ -211,6 +241,8 @@ void setup() {
     Serial.println();
 
     setupLoRa();
+
+    dht.begin();
 
     Serial.println("[Setup] Starting broadcast...\n");
 }
