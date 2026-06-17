@@ -1,31 +1,21 @@
 /*
- *  camera_yolo.h - YOLO 推論介面
- *  =============================================================
- *
- *  目的:把「跑 YOLO 推論」這件事的細節封裝起來,
- *        讓 task_verification.h 只要呼叫 yoloDetect(...) 就好。
- *
- *  Phase 1 (現在):提供假介面,讓整套程式可以編譯/跑通
- *  Phase 2 (W3-W4):A 整合 8735 官方 YOLO 範例,把真實邏輯填入
- *
- *  COCO 80 類中,我們關心的:
- *      ID 0 = person       (管院用)
- *      ID 73 = book         (人文院用)
- *      ID 64 = potted plant (理院用)
- *  (其他可參考 COCO classes 表)
+ * camera_yolo.h - 真實 YOLO 推論介面 (Ameba Pro2 8735)
+ * =============================================================
  */
 
 #ifndef CAMERA_YOLO_H
 #define CAMERA_YOLO_H
 
 #include <Arduino.h>
+#include "NNObjectDetection.h"
+#include "StreamIO.h"
 
 // ====================================================
-// COCO 80 類中的 ID
+// COCO 80 類中的 ID (預設 DEFAULT_YOLOV4TINY 類別)
 // ====================================================
 #define YOLO_PERSON         0
-#define YOLO_POTTED_PLANT   58   // (查 COCO 列表確認,新舊版本可能不同)
-#define YOLO_BOOK           73
+#define YOLO_POTTED_PLANT   58   // 盆栽植物
+#define YOLO_BOOK           73   // 書本
 
 // ====================================================
 // 偵測結果結構
@@ -33,10 +23,9 @@
 struct YoloDetection {
     int   classId;
     float confidence;
-    int   x, y, w, h;   // bounding box(若不需要可忽略)
+    int   x, y, w, h;   
 };
 
-// 最多回傳的偵測物數
 #define MAX_DETECTIONS 16
 
 struct YoloResults {
@@ -45,60 +34,103 @@ struct YoloResults {
 };
 
 // ====================================================
-// 初始化 YOLO(在 setup() 呼叫)
+// 內部實體與快取變數
 // ====================================================
-inline void initYOLO() {
-    Serial.println("[YOLO] Initializing...");
+static NNObjectDetection ObjDet;
+static StreamIO videoStreamerNN(1, 1);
 
-    // TODO【A】:整合 8735 官方 YOLO 範例,例如:
-    //
-    //   #include "NNObjectDetection.h"
-    //   ObjDetect.configVideo(config);
-    //   ObjDetect.modelSelect(OBJECT_DETECTION, YOLOV4TINY, NA_MODEL, NA_MODEL);
-    //   ObjDetect.begin();
-    //   videoStreamer.registerInput(Camera.getStream(...));
-    //   videoStreamer.registerOutput(ObjDetect);
-    //
-    // 暫時印出佔位訊息,讓系統能跑
+// 用於快取最新一次 NPU 背景辨識的結果，供 yoloDetect() 隨時調閱
+static YoloResults g_latestYoloResults;
+static SemaphoreHandle_t yoloCacheMutex = NULL;
 
-    Serial.println("[YOLO] ⚠️ Using stub implementation (placeholder)");
-    Serial.println("[YOLO] ⚠️ A needs to integrate official YOLO example");
+// ====================================================
+// NPU 物件辨識背景回呼函式 (Callback)
+// ====================================================
+inline void ODPostProcess(std::vector<ObjectDetectionResult> results) {
+    int totalObjects = ObjDet.getResultCount();
+    
+    if (yoloCacheMutex == NULL) return;
+
+    if (xSemaphoreTake(yoloCacheMutex, portMAX_DELAY) == pdTRUE) {
+        g_latestYoloResults.count = 0;
+        
+        // 將結果寫入快取結構中
+        for (int i = 0; i < totalObjects && i < MAX_DETECTIONS; i++) {
+            g_latestYoloResults.objects[i].classId    = results[i].type();
+            g_latestYoloResults.objects[i].confidence = (float)results[i].score() / 100.0; // 轉換為 0.0 ~ 1.0
+            
+            // 由於原任務主要是分類驗證，如果需要像素座標可再自行乘以解析度
+            g_latestYoloResults.objects[i].x = (int)(results[i].xMin() * 100); 
+            g_latestYoloResults.objects[i].y = (int)(results[i].yMin() * 100);
+            g_latestYoloResults.objects[i].w = (int)((results[i].xMax() - results[i].xMin()) * 100);
+            g_latestYoloResults.objects[i].h = (int)((results[i].yMax() - results[i].yMin()) * 100);
+            
+            g_latestYoloResults.count++;
+        }
+        xSemaphoreGive(yoloCacheMutex);
+    }
 }
 
 // ====================================================
-// 跑一次 YOLO 推論
-// 輸入:當前畫面(由 verifyTask 拍下)
-// 輸出:偵測到的物件清單
+// 初始化 YOLO (在主 setup() 呼叫)
 // ====================================================
-inline YoloResults yoloDetect() {
-    YoloResults r;
-    r.count = 0;
+inline void initYOLO(VideoSetting& configNN, int channelNN) {
+    Serial.println("[YOLO] Real NPU Hardware Initializing...");
 
-    // TODO【A】:替換為真實 YOLO 推論
-    //   ObjectDetectionResult* results = ObjDetect.getResult();
-    //   int n = ObjDetect.getResultCount();
-    //   for (int i = 0; i < n && r.count < MAX_DETECTIONS; i++) {
-    //       r.objects[r.count].classId    = results[i].type();
-    //       r.objects[r.count].confidence = results[i].score();
-    //       r.objects[r.count].x = results[i].xMin();
-    //       ...
-    //       r.count++;
-    //   }
-    //
-    // 暫時:用 random 模擬 50% 機率偵測到 person(讓測試流程跑通)
-
-    if (random(100) < 50) {
-        r.count = 1;
-        r.objects[0].classId    = YOLO_PERSON;
-        r.objects[0].confidence = 0.85;
-        r.objects[0].x = 100; r.objects[0].y = 100;
-        r.objects[0].w = 200; r.objects[0].h = 300;
-        Serial.println("[YOLO stub] Simulated: person detected (confidence=0.85)");
-    } else {
-        Serial.println("[YOLO stub] Simulated: nothing detected");
+    // 建立快取保護鎖
+    if (yoloCacheMutex == NULL) {
+        yoloCacheMutex = xSemaphoreCreateMutex();
     }
 
-    return r;
+    // 1. 設定物件偵測模型
+    ObjDet.configVideo(configNN);
+    ObjDet.setResultCallback(ODPostProcess);
+    // 載入 8735 內建的 Tiny YOLOv4 模型
+    ObjDet.modelSelect(OBJECT_DETECTION, DEFAULT_YOLOV4TINY, NA_MODEL, NA_MODEL);
+    ObjDet.begin();
+
+    // 2. 建立 StreamIO 管線將相機通道影像串接到 YOLO 模型中
+    videoStreamerNN.registerInput(Camera.getStream(channelNN));
+    videoStreamerNN.setStackSize();
+    videoStreamerNN.setTaskPriority();
+    videoStreamerNN.registerOutput(ObjDet);
+    
+    if (videoStreamerNN.begin() != 0) {
+        Serial.println("[YOLO] ❌ StreamIO link start failed");
+    } else {
+        Serial.println("[YOLO] ✅ StreamIO link successful");
+    }
+
+    // 3. 啟用 NN 相機通道
+    Camera.channelBegin(channelNN);
+    Serial.println("[YOLO] ✅ NPU Model loaded. Live inference started.");
+}
+
+// ====================================================
+// 跑一次 YOLO 推論 (獲取當下最新一影格的快取結果)
+// ====================================================
+inline YoloResults yoloDetect() {
+    YoloResults currentResults;
+    currentResults.count = 0;
+
+    if (yoloCacheMutex != NULL) {
+        if (xSemaphoreTake(yoloCacheMutex, portMAX_DELAY) == pdTRUE) {
+            // 拷貝當前最新辨識結果
+            currentResults = g_latestYoloResults;
+            xSemaphoreGive(yoloCacheMutex);
+        }
+    }
+
+    Serial.print("[YOLO Real] Retreived latest frame results. Object count = ");
+    Serial.println(currentResults.count);
+    
+    // 印出目前畫面上偵測到的種類，除錯用
+    // for(int i = 0; i < currentResults.count; i++) {
+    // printf("   -> Obj [%d]: Class ID = %d, Confidence = %.2f\n", 
+    //        i, currentResults.objects[i].classId, currentResults.objects[i].confidence);
+    // }
+
+    return currentResults;
 }
 
 // ====================================================
