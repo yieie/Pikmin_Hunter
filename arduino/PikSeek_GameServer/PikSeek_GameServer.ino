@@ -42,9 +42,15 @@ char pass[] = WIFI_PASS;
 int wifiStatus = WL_IDLE_STATUS;
 
 // ====================================================
-// 串流影像設定
+// 串流影像與 NN 設定
 // ====================================================
+#define CHANNELNN 3
+#define NNWIDTH   576
+#define NNHEIGHT  320
+
 VideoSetting config(VIDEO_VGA, STREAM_FPS, VIDEO_JPEG, 1);
+// 建立給 NN 使用的低解析度 RGB 影片設定
+VideoSetting configNN(NNWIDTH, NNHEIGHT, 10, VIDEO_RGB, 0);
 
 // ====================================================
 // 連 Wi-Fi
@@ -81,14 +87,18 @@ void setup() {
     // 連 Wi-Fi
     connectWiFi();
 
-    // 啟動相機
+    // 啟動主相機通道 (網頁串流用)
     Camera.configVideoChannel(CHANNEL, config);
+    
+    // 啟動 NN 相機通道 (NPU 辨識用)
+    Camera.configVideoChannel(CHANNELNN, configNN);
     Camera.videoInit();
+    
     Camera.channelBegin(CHANNEL);
-    Serial.println("[Camera] Initialized");
+    Serial.println("[Camera] Channel 0 Initialized");
 
-    // 初始化 YOLO(載入模型)— 由 A 負責實作
-    initYOLO();
+    // 初始化 YOLO (將設定與通道帶入)
+    initYOLO(configNN, CHANNELNN);
 
     // 印出網址
     Serial.println();
