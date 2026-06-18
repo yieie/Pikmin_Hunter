@@ -24,27 +24,31 @@
 #include "game_state.h"
 #include "colleges.h"
 #include "camera_yolo.h"
+#include "107_detect.h" // 加上你的分類器
 
 // ====================================================
 // 驗證函式宣告
 // ====================================================
-bool verifyMGT();  // 管院:YOLO person + LoRa RSSI > -50
-bool verifySCI();  // 理院:YOLO potted plant
-bool verifyHUM();  // 人文院:YOLO book
-bool verifyENG();  // 工院:濕度 >= 80%(純感測器)
-bool verifyLAW();  // 法院:Template Matching → 自訓二分類
+bool verifyMGT(); // 管院:YOLO person + LoRa RSSI > -50
+bool verifySCI(); // 理院:YOLO potted plant
+bool verifyHUM(); // 人文院:YOLO book
+bool verifyENG(); // 工院:濕度 >= 80%(純感測器)
+bool verifyLAW(); // 法院:Template Matching → 自訓二分類
 
 // ====================================================
 // 管院:YOLO person + LoRa RSSI 雙重驗證
 // ====================================================
-bool verifyMGT() {
+bool verifyMGT()
+{
     // 條件 1:LoRa RSSI 夠強(代表玩家真的在節點旁)
     int rssi = -120;
-    if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE)
+    {
         rssi = g_lastRssi;
         xSemaphoreGive(stateMutex);
     }
-    if (rssi < -50) {
+    if (rssi < -50)
+    {
         Serial.print("[VERIFY MGT] ❌ RSSI too weak: ");
         Serial.println(rssi);
         return false;
@@ -52,7 +56,8 @@ bool verifyMGT() {
 
     // 條件 2:YOLO 偵測到 person
     YoloResults r = yoloDetect();
-    if (!yoloHasClass(r, YOLO_PERSON, 0.6)) {
+    if (!yoloHasClass(r, YOLO_PERSON, 0.6))
+    {
         Serial.println("[VERIFY MGT] ❌ No person detected");
         return false;
     }
@@ -64,9 +69,11 @@ bool verifyMGT() {
 // ====================================================
 // 理院:YOLO potted plant
 // ====================================================
-bool verifySCI() {
+bool verifySCI()
+{
     YoloResults r = yoloDetect();
-    if (yoloHasClass(r, YOLO_POTTED_PLANT, 0.5)) {
+    if (yoloHasClass(r, YOLO_POTTED_PLANT, 0.5))
+    {
         Serial.println("[VERIFY SCI] ✅ Plant detected");
         return true;
     }
@@ -77,9 +84,11 @@ bool verifySCI() {
 // ====================================================
 // 人文院:YOLO book
 // ====================================================
-bool verifyHUM() {
+bool verifyHUM()
+{
     YoloResults r = yoloDetect();
-    if (yoloHasClass(r, YOLO_BOOK, 0.5)) {
+    if (yoloHasClass(r, YOLO_BOOK, 0.5))
+    {
         Serial.println("[VERIFY HUM] ✅ Book detected");
         return true;
     }
@@ -90,9 +99,11 @@ bool verifyHUM() {
 // ====================================================
 // 工院:濕度 >= 80%(LoRa 傳來的 DHT22 數值)
 // ====================================================
-bool verifyENG() {
+bool verifyENG()
+{
     int humidity = 0;
-    if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+    if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE)
+    {
         humidity = g_engHumidity;
         xSemaphoreGive(stateMutex);
     }
@@ -101,7 +112,8 @@ bool verifyENG() {
     Serial.print(humidity);
     Serial.println("%");
 
-    if (humidity >= 80) {
+    if (humidity >= 80)
+    {
         Serial.println("[VERIFY ENG] ✅ Humidity threshold met");
         return true;
     }
@@ -112,44 +124,43 @@ bool verifyENG() {
 // ====================================================
 // 法院:Template Matching(MVP)→ 自訓二分類(進階)
 // ====================================================
-bool verifyLAW() {
-    // TODO【A】Phase 1 (W5-W6):OpenCV Template Matching
-    //   - 載入預存的 "107" 門牌範本
-    //   - 對玩家拍下的畫面跑 cv::matchTemplate()
-    //   - 相似度 > 0.7 → 通過
-    //
-    // TODO【A】Phase 2 (W7-W8):升級為自訓二分類器
-    //   - 載入 door_107.tflite
-    //   - 推論 → confidence > 0.7 → 通過
+bool verifyLAW()
+{
+    Serial.println("[VERIFY LAW] Checking 107 doorplate...");
 
-    // 暫時:50% 機率通過(讓測試跑得通)
-    bool result = (random(100) < 50);
-    if (result) {
-        Serial.println("[VERIFY LAW stub] ✅ Random pass (replace with real impl)");
-    } else {
-        Serial.println("[VERIFY LAW stub] ❌ Random fail");
+    // 呼叫你的 107_detect 模組
+    if (getDoorplateStatus() == IS_107)
+    {
+        Serial.println("[VERIFY LAW] ✅ 107 門牌辨識通過！");
+        return true;
     }
-    return result;
+
+    Serial.println("[VERIFY LAW] ❌ 非 107 門牌");
+    return false; // 補上這個預設回傳
 }
 
 // ====================================================
 // Verification Task 主體
 // ====================================================
-void verificationTask(void *parameter) {
+void verificationTask(void *parameter)
+{
     Serial.println("[Task] verificationTask started, waiting for signals...");
 
-    while (true) {
+    while (true)
+    {
         // 等待玩家觸發(由 web_server 呼叫 requestVerification() 喚醒)
         xSemaphoreTake(verifySignal, portMAX_DELAY);
 
         // 取得當前學院
         String college;
-        if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
+        if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE)
+        {
             college = g_currentCollege;
             xSemaphoreGive(stateMutex);
         }
 
-        if (college.length() == 0) {
+        if (college.length() == 0)
+        {
             Serial.println("[VERIFY] No active college, ignoring");
             continue;
         }
@@ -160,19 +171,28 @@ void verificationTask(void *parameter) {
 
         // 根據學院跑對應的 verify 函式
         bool passed = false;
-        if      (college == "MGT") passed = verifyMGT();
-        else if (college == "SCI") passed = verifySCI();
-        else if (college == "HUM") passed = verifyHUM();
-        else if (college == "ENG") passed = verifyENG();
-        else if (college == "LAW") passed = verifyLAW();
+        if (college == "MGT")
+            passed = verifyMGT();
+        else if (college == "SCI")
+            passed = verifySCI();
+        else if (college == "HUM")
+            passed = verifyHUM();
+        else if (college == "ENG")
+            passed = verifyENG();
+        else if (college == "LAW")
+            passed = verifyLAW();
 
         // 更新結果
-        const College* col = findCollege(college);
-        if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE) {
-            if (passed) {
+        const College *col = findCollege(college);
+        if (xSemaphoreTake(stateMutex, portMAX_DELAY) == pdTRUE)
+        {
+            if (passed)
+            {
                 // 加入已捕獲清單
-                if (g_collegesGot.indexOf(college) < 0) {
-                    if (g_collegesGot.length() > 0) g_collegesGot += ",";
+                if (g_collegesGot.indexOf(college) < 0)
+                {
+                    if (g_collegesGot.length() > 0)
+                        g_collegesGot += ",";
                     g_collegesGot += college;
                 }
                 g_lastMessage = col ? col->successMsg : "";
@@ -181,9 +201,11 @@ void verificationTask(void *parameter) {
                 g_stateChangedAt = millis();
                 Serial.print("[GAME] → CAPTURED: ");
                 Serial.println(college);
-            } else {
+            }
+            else
+            {
                 g_verifyResult = "❌ 任務未通過,再試一次!";
-                g_state = STATE_HINTING;  // 回到 HINTING 讓玩家再試
+                g_state = STATE_HINTING; // 回到 HINTING 讓玩家再試
                 g_stateChangedAt = millis();
             }
             g_verifyResultReady = true;
