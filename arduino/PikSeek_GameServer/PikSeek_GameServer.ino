@@ -26,13 +26,14 @@
 #include <WiFi.h>
 #include "VideoStream.h"
 
-#include "../secrets.h"
+#include "C:\Users\Brian\Desktop\107\secrets.h"
 #include "game_state.h"
 #include "colleges.h"
 #include "lora_handler.h"
 #include "camera_yolo.h"
 #include "task_verification.h"
 #include "web_server.h"
+#include "107_detect.h"
 
 // ====================================================
 // Wi-Fi
@@ -49,10 +50,12 @@ VideoSetting config(VIDEO_VGA, STREAM_FPS, VIDEO_JPEG, 1);
 // ====================================================
 // 連 Wi-Fi
 // ====================================================
-void connectWiFi() {
+void connectWiFi()
+{
     Serial.print("[WiFi] Connecting to ");
     Serial.println(ssid);
-    while (wifiStatus != WL_CONNECTED) {
+    while (wifiStatus != WL_CONNECTED)
+    {
         wifiStatus = WiFi.begin(ssid, pass);
         Serial.print(".");
         delay(3000);
@@ -65,7 +68,8 @@ void connectWiFi() {
 // ====================================================
 // Setup
 // ====================================================
-void setup() {
+void setup()
+{
     Serial.begin(115200);
     delay(1000);
 
@@ -76,20 +80,33 @@ void setup() {
     Serial.println("================================================");
 
     // 初始化遊戲狀態(建立 mutex)
+    // 初始化遊戲狀態(建立 mutex)
     initGameState();
 
     // 連 Wi-Fi
     connectWiFi();
 
-    // 啟動相機
-    Camera.configVideoChannel(CHANNEL, config);
+    // ====================================================
+    // 啟動相機雙頻道 (直接覆蓋原本 Camera 的地方)
+    // ====================================================
+    // 頻道 0: 專門給網頁 MJPEG 串流看畫面 (VGA, JPEG 格式)
+    VideoSetting configWidget(VIDEO_VGA, STREAM_FPS, VIDEO_JPEG, 1);
+    Camera.configVideoChannel(0, configWidget);
+
+    // 頻道 1: 專門餵給你的 107 分類模型 (128x128, RGB 格式)
+    VideoSetting configAI(128, 128, 10, VIDEO_RGB, 0);
+    Camera.configVideoChannel(1, configAI);
+
     Camera.videoInit();
-    Camera.channelBegin(CHANNEL);
-    Serial.println("[Camera] Initialized");
 
-    // 初始化 YOLO(載入模型)— 由 A 負責實作
-    initYOLO();
+    // 雙通道各自開啟，各走各的路，互不卡死
+    Camera.channelBegin(0);
+    Camera.channelBegin(1);
+    Serial.println("[Camera] Dual Channels (0: Web, 1: AI) Initialized");
 
+    // 初始化模型 (注意：先不要初始化 YOLO，測試時我們先專注在 107 門牌)
+    initYOLO(); //
+    init107Detect();
     // 印出網址
     Serial.println();
     Serial.println("================================================");
@@ -104,11 +121,11 @@ void setup() {
     Serial.println("================================================");
 
     // 啟動五個 Task
-    xTaskCreate(webTask,          "WebTask",         (4 * 1024), NULL, 1, NULL);
-    xTaskCreate(streamTask,       "StreamTask",      (8 * 1024), NULL, 1, NULL);
-    xTaskCreate(stateTask,        "StateTask",       (2 * 1024), NULL, 1, NULL);
-    xTaskCreate(loraTask,         "LoraTask",        (4 * 1024), NULL, 1, NULL);
-    xTaskCreate(verificationTask, "VerifyTask",      (6 * 1024), NULL, 1, NULL);
+    xTaskCreate(webTask, "WebTask", (4 * 1024), NULL, 1, NULL);
+    xTaskCreate(streamTask, "StreamTask", (8 * 1024), NULL, 1, NULL);
+    xTaskCreate(stateTask, "StateTask", (2 * 1024), NULL, 1, NULL);
+    xTaskCreate(loraTask, "LoraTask", (4 * 1024), NULL, 1, NULL);
+    xTaskCreate(verificationTask, "VerifyTask", (6 * 1024), NULL, 1, NULL);
 
     Serial.println("[Setup] All 5 tasks started.");
 }
@@ -116,7 +133,8 @@ void setup() {
 // ====================================================
 // Loop(主程式空,所有工作交給 task)
 // ====================================================
-void loop() {
+void loop()
+{
     delay(30000);
     Serial.print("[Heartbeat] uptime: ");
     Serial.print(millis() / 1000);
