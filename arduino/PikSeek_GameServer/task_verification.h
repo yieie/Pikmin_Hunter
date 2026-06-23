@@ -122,23 +122,36 @@ bool verifyENG()
 }
 
 // ====================================================
-// 法院:Template Matching(MVP)→ 自訓二分類(進階)
+// 法院:107 教室門牌辨識(自訓 CNN 模型)
 // ====================================================
-bool verifyLAW()
-{
-    Serial.println("[VERIFY LAW] Checking 107 doorplate...");
-
-    // 呼叫你的 107_detect 模組
-    if (getDoorplateStatus() == IS_107)
-    {
-        Serial.println("[VERIFY LAW] ✅ 107 門牌辨識通過！");
-        return true;
+bool verifyLAW() {
+    // 8 秒內,每 200ms 看一次
+    // 只要任何時刻看到 IS_107 (score>80) → 通過
+    enableLawDetection();
+    const unsigned long TIMEOUT_MS = 8000;
+    const unsigned long POLL_MS = 200;
+    unsigned long startTime = millis();
+    int attempts = 0;
+    
+    while (millis() - startTime < TIMEOUT_MS) {
+        attempts++;
+        DoorplateResult result = getDoorplateStatus();
+        if (result == IS_107) {
+            Serial.print("[VERIFY LAW] ✅ 通過 (第 ");
+            Serial.print(attempts);
+            Serial.println(" 次嘗試)");
+            disableLawDetection();
+            return true;
+        }
+        vTaskDelay(POLL_MS / portTICK_PERIOD_MS);
     }
-
-    Serial.println("[VERIFY LAW] ❌ 非 107 門牌");
-    return false; // 補上這個預設回傳
+    
+    Serial.print("[VERIFY LAW] ❌ 超時 (共 ");
+    Serial.print(attempts);
+    Serial.println(" 次嘗試都沒看到 107)");
+    disableLawDetection();
+    return false;
 }
-
 // ====================================================
 // Verification Task 主體
 // ====================================================

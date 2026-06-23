@@ -90,8 +90,11 @@ const char GAME_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
 <title>皮探隊</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,"Microsoft JhengHei",sans-serif;background:#0f172a;background-image:radial-gradient(circle at 20% 0%,rgba(74,222,128,.15),transparent 50%),radial-gradient(circle at 80% 100%,rgba(168,85,247,.15),transparent 50%);color:#e2e8f0;min-height:100vh;padding:12px;user-select:none}
-.c{max-width:540px;margin:0 auto}
+html,body{height:100%}
+body{font-family:-apple-system,"Microsoft JhengHei",sans-serif;background:#0f172a;background-image:radial-gradient(circle at 20% 0%,rgba(74,222,128,.15),transparent 50%),radial-gradient(circle at 80% 100%,rgba(168,85,247,.15),transparent 50%);color:#e2e8f0;height:100vh;height:100dvh;overflow:hidden;user-select:none}
+.c{max-width:540px;margin:0 auto;height:100%;display:flex;flex-direction:column}
+.top-fixed{flex-shrink:0;padding:12px 12px 0 12px;position:relative;z-index:2;box-shadow:0 10px 16px -10px rgba(0,0,0,.5)}
+.scroll-area{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 12px 28px 12px}
 header{text-align:center;margin-bottom:12px}
 .lg{font-size:28px}
 h1{font-size:18px;color:#4ade80;letter-spacing:2px;margin:2px 0}
@@ -133,8 +136,29 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .dev-lb{font-size:9px;color:#64748b;text-transform:uppercase;margin-bottom:6px}
 .dev-row{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
 .dev-btn{background:#334155;color:#94a3b8;padding:8px;font-size:11px;border-radius:6px;border:none;cursor:pointer}
+.hint-btn{width:100%;background:#334155;color:#e2e8f0;border:1px dashed #64748b;padding:10px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;margin-top:10px}
+.hint-btn:active{transform:scale(.97)}
+.quest-box{margin-top:8px;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.3);border-radius:10px;padding:12px;animation:qfade .25s ease}
+@keyframes qfade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.quest-label{font-size:10px;color:#60a5fa;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-weight:700}
+.quest-text{font-size:13px;line-height:1.6;white-space:pre-wrap;color:#e2e8f0}
+.celebrate-overlay{position:fixed;inset:0;background:rgba(15,23,42,.88);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;pointer-events:none;transition:opacity .25s;padding:20px}
+.celebrate-overlay.show{opacity:1;pointer-events:auto}
+.celebrate-confetti{position:absolute;inset:0;overflow:hidden}
+.confetti-piece{position:absolute;top:-10px;width:8px;height:14px;opacity:.9;animation:confetti-fall linear forwards;border-radius:2px}
+@keyframes confetti-fall{to{transform:translateY(110vh) rotate(540deg);opacity:0}}
+.celebrate-card{position:relative;z-index:1;background:linear-gradient(160deg,#1e293b,#0f172a);border:1px solid rgba(250,204,21,.4);border-radius:20px;padding:28px 24px;max-width:320px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6);animation:celpop .4s cubic-bezier(.34,1.56,.64,1)}
+@keyframes celpop{from{transform:scale(.6) translateY(20px);opacity:0}to{transform:scale(1) translateY(0);opacity:1}}
+.celebrate-emoji{font-size:56px;margin-bottom:8px;animation:celbounce 1.2s ease infinite}
+@keyframes celbounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.celebrate-title{font-size:20px;font-weight:700;color:#facc15;letter-spacing:2px;margin-bottom:4px}
+.celebrate-name{font-size:15px;color:#4ade80;font-weight:700;margin-bottom:12px}
+.celebrate-msg{font-size:13px;line-height:1.6;color:#cbd5e1;white-space:pre-wrap;margin-bottom:18px}
+.celebrate-close{background:#facc15;color:#0f172a;border:none;padding:12px 20px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer}
+.celebrate-close:active{transform:scale(.96)}
 </style></head><body>
 <div class="c">
+<div class="top-fixed">
 <header><div class="lg">🌱</div><h1>皮 探 隊</h1><div class="s">PikSeek · v4.0</div></header>
 
 <div class="fr">
@@ -142,12 +166,22 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <div class="rs" id="rssi">--- dBm</div>
 <img id="vid" alt="影像">
 </div>
+</div>
+
+<div class="scroll-area">
 
 <div class="cd" id="mainCard">
 <div class="lb" id="mainLabel">📜 任務狀態</div>
 <div class="tk" id="mainText">載入中...</div>
 <div id="engMeter" style="display:none">
 <div class="eng-meter"><div class="eng-bar" id="engBar"></div><div class="eng-text" id="engText">0%</div></div>
+</div>
+<div id="questBlock" style="display:none">
+<button class="hint-btn" id="hintBtn" onclick="toggleHint()">💡 查看通關任務提示</button>
+<div class="quest-box" id="questBox" style="display:none">
+<div class="quest-label">📦 通關任務</div>
+<div class="quest-text" id="questText"></div>
+</div>
 </div>
 <div id="captureArea" style="display:none">
 <div class="ac"><button onclick="doVerify()" id="capBtn">📷 捕獲!</button></div>
@@ -179,8 +213,20 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <button class="warn" onclick="reset()">🗑️ 清空</button>
 </div>
 </div>
+
+</div>
 </div>
 <div class="ts" id="toast"></div>
+<div class="celebrate-overlay" id="celebrateOverlay">
+<div class="celebrate-confetti" id="confettiLayer"></div>
+<div class="celebrate-card">
+<div class="celebrate-emoji" id="celEmoji">🌱</div>
+<div class="celebrate-title">捕獲成功!</div>
+<div class="celebrate-name" id="celName"></div>
+<div class="celebrate-msg" id="celMsg"></div>
+<button class="celebrate-close" onclick="hideCelebration()">收下皮克敏 →</button>
+</div>
+</div>
 
 <script>
 const STREAM_URL = 'http://' + location.hostname + ':8080/';
@@ -212,8 +258,55 @@ async function trig(c){
 }
 async function reset(){
   if(!confirm('確定要清空?')) return;
+  revealedHints.clear();
   await fetch('/api/reset'); show('已重置');
 }
+let curCollege = null;
+const revealedHints = new Set();
+function toggleHint(){
+  if(!curCollege) return;
+  if(revealedHints.has(curCollege)) revealedHints.delete(curCollege);
+  else revealedHints.add(curCollege);
+  renderHintState();
+}
+function renderHintState(){
+  const btn = document.getElementById('hintBtn');
+  const box = document.getElementById('questBox');
+  const revealed = curCollege && revealedHints.has(curCollege);
+  box.style.display = revealed ? 'block' : 'none';
+  btn.textContent = revealed ? '🙈 隱藏通關任務' : '💡 查看通關任務提示';
+}
+
+let celebrateTimer = null;
+function spawnConfetti(){
+  const layer = document.getElementById('confettiLayer');
+  layer.innerHTML = '';
+  const colors = ['#4ade80','#facc15','#60a5fa','#f472b6','#a855f7','#fb923c'];
+  for(let i=0;i<28;i++){
+    const p = document.createElement('div');
+    p.className = 'confetti-piece';
+    p.style.left = (Math.random()*100) + '%';
+    p.style.background = colors[i % colors.length];
+    p.style.animationDuration = (1.6 + Math.random()*1.2) + 's';
+    p.style.animationDelay = (Math.random()*0.4) + 's';
+    layer.appendChild(p);
+  }
+}
+function showCelebration(d){
+  document.getElementById('celEmoji').textContent = d.emoji || '🌱';
+  document.getElementById('celName').textContent = '✨ ' + (d.pikminName || '皮克敏');
+  document.getElementById('celMsg').textContent = d.message || '';
+  spawnConfetti();
+  document.getElementById('celebrateOverlay').classList.add('show');
+  if(navigator.vibrate) navigator.vibrate([100,50,100,50,300]);
+  clearTimeout(celebrateTimer);
+  celebrateTimer = setTimeout(hideCelebration, 4500);
+}
+function hideCelebration(){
+  document.getElementById('celebrateOverlay').classList.remove('show');
+  clearTimeout(celebrateTimer);
+}
+
 async function doVerify(){
   document.getElementById('capBtn').disabled = true;
   show('🧠 AI 推論中...');
@@ -244,14 +337,17 @@ async function syncState(){
     const text = document.getElementById('mainText');
     const capArea = document.getElementById('captureArea');
     const engMeter = document.getElementById('engMeter');
+    const questBlock = document.getElementById('questBlock');
     card.className = 'cd';
     capArea.style.display = 'none';
     engMeter.style.display = 'none';
+    questBlock.style.display = 'none';
 
     if(d.state === 0){
       card.classList.add('waiting');
       label.textContent = '📜 任務狀態';
       text.textContent = '🔍 探索校園,尋找皮克敏的訊號...';
+      curCollege = null;
     }
     else if(d.state === 1){
       card.classList.add('detected');
@@ -259,10 +355,14 @@ async function syncState(){
       text.textContent = '⚡ 偵測到 ' + (d.collegeName||'') + ' 的訊號!\n\n' + (d.pikminName||'') + ' 正在留下線索...';
     }
     else if(d.state === 2){
-      // HINTING:顯示謎題 + 任務說明
+      // HINTING:預設只顯示謎題,通關任務需點擊「提示」才會出現
+      curCollege = d.college;
       label.textContent = '🧩 ' + (d.pikminName||'') + ' 的線索';
-      text.textContent = (d.locationHint||'') + '\n\n────────────\n\n' + (d.questDesc||'');
+      text.textContent = (d.locationHint||'');
       capArea.style.display = 'block';
+      questBlock.style.display = 'block';
+      document.getElementById('questText').textContent = d.questDesc||'';
+      renderHintState();
       // 工院顯示濕度進度條
       if(d.college === 'ENG'){
         engMeter.style.display = 'block';
@@ -284,7 +384,7 @@ async function syncState(){
 
     if(d.state !== lastState){
       if(d.state === 1 && navigator.vibrate) navigator.vibrate([200,100,200]);
-      if(d.state === 4 && navigator.vibrate) navigator.vibrate([100,50,100,50,300]);
+      if(d.state === 4) showCelebration(d);
     }
     lastState = d.state;
   }catch(e){}
@@ -329,6 +429,7 @@ void handleStateApi(WiFiClient &c) {
         if (col) {
             json += ",\"collegeName\":\"" + escapeJson(col->name) + "\"";
             json += ",\"pikminName\":\""  + escapeJson(col->pikminName) + "\"";
+            json += ",\"emoji\":\""       + escapeJson(col->emoji) + "\"";
             json += ",\"locationHint\":\"" + escapeJson(col->locationHint) + "\"";
             json += ",\"questDesc\":\""    + escapeJson(col->questDesc) + "\"";
             json += ",\"message\":\""      + escapeJson(g_lastMessage) + "\"";

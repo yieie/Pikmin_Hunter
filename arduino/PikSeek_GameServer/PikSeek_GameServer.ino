@@ -26,7 +26,7 @@
 #include <WiFi.h>
 #include "VideoStream.h"
 
-#include "C:\Users\Brian\Desktop\107\secrets.h"
+#include "../secrets.h"
 #include "game_state.h"
 #include "colleges.h"
 #include "lora_handler.h"
@@ -45,7 +45,12 @@ int wifiStatus = WL_IDLE_STATUS;
 // ====================================================
 // 串流影像設定
 // ====================================================
+// Channel 0:給網頁 MJPEG 串流(VGA 解析度,JPEG)
 VideoSetting config(VIDEO_VGA, STREAM_FPS, VIDEO_JPEG, 1);
+
+// Channel 1:給 107 自訓 CNN 模型推論(128x128 RGB,10fps)
+// 必須跟訓練時的 input_shape=(128,128,3) 一致
+VideoSetting configNN(NN_WIDTH, NN_HEIGHT, 10, VIDEO_RGB, 0);
 
 // ====================================================
 // 連 Wi-Fi
@@ -89,24 +94,17 @@ void setup()
     // ====================================================
     // 啟動相機雙頻道 (直接覆蓋原本 Camera 的地方)
     // ====================================================
-    // 頻道 0: 專門給網頁 MJPEG 串流看畫面 (VGA, JPEG 格式)
-    VideoSetting configWidget(VIDEO_VGA, STREAM_FPS, VIDEO_JPEG, 1);
-    Camera.configVideoChannel(0, configWidget);
-
-    // 頻道 1: 專門餵給你的 107 分類模型 (128x128, RGB 格式)
-    VideoSetting configAI(128, 128, 10, VIDEO_RGB, 0);
-    Camera.configVideoChannel(1, configAI);
-
+    Camera.configVideoChannel(CHANNEL, config);          // Ch0:給網頁串流
+    Camera.configVideoChannel(CHANNEL_NN, configNN);     // Ch1:給 107 模型推論
     Camera.videoInit();
-
-    // 雙通道各自開啟，各走各的路，互不卡死
-    Camera.channelBegin(0);
-    Camera.channelBegin(1);
-    Serial.println("[Camera] Dual Channels (0: Web, 1: AI) Initialized");
-
     // 初始化模型 (注意：先不要初始化 YOLO，測試時我們先專注在 107 門牌)
-    initYOLO(); //
-    init107Detect();
+//    initYOLO(); //
+    init107Detect(configNN);
+    Camera.channelBegin(CHANNEL);
+    Camera.channelBegin(CHANNEL_NN);
+    Serial.println("[Camera] Dual channels (0=stream, 1=AI) initialized");
+
+    
     // 印出網址
     Serial.println();
     Serial.println("================================================");
