@@ -43,10 +43,15 @@ char pass[] = WIFI_PASS;
 int wifiStatus = WL_IDLE_STATUS;
 
 // ====================================================
-// 串流影像設定
+// 串流影像與 NN 設定
 // ====================================================
-// Channel 0:給網頁 MJPEG 串流(VGA 解析度,JPEG)
+#define CHANNELNN 3
+#define NNWIDTH   576
+#define NNHEIGHT  320
+
 VideoSetting config(VIDEO_VGA, STREAM_FPS, VIDEO_JPEG, 1);
+// 建立給 NN 使用的低解析度 RGB 影片設定
+VideoSetting configNN(NNWIDTH, NNHEIGHT, 10, VIDEO_RGB, 0);
 
 // Channel 1:給 107 自訓 CNN 模型推論(128x128 RGB,10fps)
 // 必須跟訓練時的 input_shape=(128,128,3) 一致
@@ -98,7 +103,7 @@ void setup()
     Camera.configVideoChannel(CHANNEL_NN, configNN);     // Ch1:給 107 模型推論
     Camera.videoInit();
     // 初始化模型 (注意：先不要初始化 YOLO，測試時我們先專注在 107 門牌)
-//    initYOLO(); //
+    initYOLO(configNN, CHANNELNN); 
     init107Detect(configNN);
     Camera.channelBegin(CHANNEL);
     Camera.channelBegin(CHANNEL_NN);
